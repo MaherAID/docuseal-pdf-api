@@ -8,7 +8,7 @@ source 'https://rubygems.org'
 ruby '>= 4.0.0'
 
 group :development do
-  gem 'rubocop', '1.86.0', require: false
-  gem 'rubocop-performance', '1.26.1', require: false
-  gem 'rubocop-rails', '2.34.3', require: false
+  gem 'rubocop', '1.92.0', require: false
+  gem 'rubocop-performance', '1.27.0', require: false
+  gem 'rubocop-rails', '2.38.0', require: false
 end
