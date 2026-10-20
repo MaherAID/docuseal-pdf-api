@@ -1,0 +1,44 @@
+# docuseal-pdf-api (modified version of DocuSeal, AGPL-3.0): label of the source code link
+# shown below the DocuSeal attribution (vendor/docuseal_pdf_api/views/shared/_attribution.html.erb).
+en:
+  docuseal_pdf_api:
+    source_code: Source code (AGPL-3.0)
+de:
+  docuseal_pdf_api:
+    source_code: Quellcode (AGPL-3.0)
+fr:
+  docuseal_pdf_api:
+    source_code: Code source (AGPL-3.0)
+it:
+  docuseal_pdf_api:
+    source_code: Codice sorgente (AGPL-3.0)
+es:
+  docuseal_pdf_api:
+    source_code: Código fuente (AGPL-3.0)
+nl:
+  docuseal_pdf_api:
+    source_code: Broncode (AGPL-3.0)
+pt:
+  docuseal_pdf_api:
+    source_code: Código-fonte (AGPL-3.0)
+pl:
+  docuseal_pdf_api:
+    source_code: Kod źródłowy (AGPL-3.0)
+uk:
+  docuseal_pdf_api:
+    source_code: Вихідний код (AGPL-3.0)
+cs:
+  docuseal_pdf_api:
+    source_code: Zdrojový kód (AGPL-3.0)
+he:
+  docuseal_pdf_api:
+    source_code: קוד מקור (AGPL-3.0)
+ar:
+  docuseal_pdf_api:
+    source_code: الشيفرة المصدرية (AGPL-3.0)
+ko:
+  docuseal_pdf_api:
+    source_code: 소스 코드 (AGPL-3.0)
+ja:
+  docuseal_pdf_api:
+    source_code: ソースコード (AGPL-3.0)

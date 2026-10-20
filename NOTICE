@@ -1,0 +1,24 @@
+docuseal-pdf-api
+Copyright (C) 2026 Auto-i-DAT AG
+
+This is a modified version of DocuSeal (https://github.com/docusealco/docuseal),
+Copyright (C) 2023-2026 DocuSeal LLC, licensed under the GNU Affero General Public License v3.0 with
+additional terms under section 7(b) (see LICENSE and LICENSE_ADDITIONAL_TERMS). This modified
+version is distributed under the same license and additional terms.
+
+Base version: DocuSeal 3.3.3 (git tag 3.3.3, commit 8f8f69f0bc6ac2e59746cd6efac54a852289bec3;
+Docker image docuseal/docuseal:3.3.3@sha256:28d0ca583860e2c73e5b068756023a93a325799a22da1f788355d566865dd051).
+
+Modifications (2026-10-20, Auto-i-DAT AG) - files added to the application, no upstream file
+was changed:
+  - app/controllers/api/templates_pdf_controller.rb: new API endpoint POST /api/templates/pdf
+  - lib/docuseal_pdf_api.rb, lib/docuseal_pdf_api/*.rb: request validation and template creation
+  - config/initializers/docuseal_pdf_api.rb: route registration and view path for the source offer
+  - app/controllers/docuseal_pdf_api/source_controller.rb: GET /source (AGPL-3.0 section 13)
+  - vendor/docuseal_pdf_api/views/shared/_attribution.html.erb: renders the unchanged DocuSeal
+    attribution and adds a link to the corresponding source below it
+  - config/locales/docuseal_pdf_api.yml: label of that link
+  - Docker image: health check on /up, OCI labels
+
+Corresponding source of this version: https://github.com/MaherAID/docuseal-pdf-api
+(the running instance links to the exact commit at /source).

@@ -1,0 +1,8 @@
+<%# docuseal-pdf-api (modified version of DocuSeal, AGPL-3.0).
+    Upstream shared/_attribution only renders shared/_powered_by. This override renders that
+    unmodified DocuSeal attribution first and adds the AGPL-3.0 section 13 source offer below it.
+    The Dockerfile checks the sha256 of the upstream partial so a change there fails the build. %>
+<%= render 'shared/powered_by', with_counter: local_assigns[:with_counter], link_path: local_assigns[:link_path] %>
+<div class="text-center px-2" data-docuseal-pdf-api="source-offer">
+  <a href="<%= DocusealPdfApi.source_code_url %>" class="underline" target="_blank" rel="noopener"><%= t('docuseal_pdf_api.source_code') %></a>
+</div>

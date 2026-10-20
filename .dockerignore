@@ -1,0 +1,4 @@
+# The image only needs the overlay; everything else stays out of the build context
+# (secrets in .env / .e2e, tests, docs, git metadata).
+*
+!overlay/
