@@ -1,0 +1,21 @@
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# End-to-end test state: generated secrets, outputs
+.e2e/
+
+# Python / Ruby tooling
+__pycache__/
+*.pyc
+.ruff_cache/
+.bundle/
+vendor/bundle/
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
