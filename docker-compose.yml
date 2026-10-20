@@ -1,0 +1,81 @@
+# Local development stack: docuseal-pdf-api + PostgreSQL 16.
+#   cp .env.example .env   # fill in the secrets
+#   docker compose up -d --build
+#   open http://localhost:3080 and run the DocuSeal setup wizard
+# The "test" profile adds the services used by tests/e2e/run.sh.
+name: docuseal-pdf-api
+
+services:
+  db:
+    image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+    environment:
+      POSTGRES_USER: docuseal
+      POSTGRES_DB: docuseal
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U docuseal -d docuseal"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  app:
+    build:
+      context: .
+      args:
+        SOURCE_REVISION: ${SOURCE_REVISION:-}
+    image: ${IMAGE:-docuseal-pdf-api:local}
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://docuseal:${POSTGRES_PASSWORD}@db:5432/docuseal
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE:?set SECRET_KEY_BASE in .env}
+      # Public base URL used for links in API responses, webhooks and emails.
+      APP_URL: ${APP_URL:-http://localhost:3080}
+      # Any non-empty value except "false" enables HTTPS-only mode (only behind TLS).
+      FORCE_SSL: ${FORCE_SSL:-}
+    ports:
+      - "127.0.0.1:${APP_PORT:-3080}:3000"
+    volumes:
+      - docuseal-data:/data/docuseal
+    restart: unless-stopped
+
+  webhook-receiver:
+    profiles: ["test"]
+    build: tests/e2e
+    image: docuseal-pdf-api-e2e:local
+    command: ["python", "-I", "receiver.py"]
+    healthcheck:
+      test: ["CMD", "python", "-I", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=2)"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  e2e:
+    profiles: ["test"]
+    build: tests/e2e
+    image: docuseal-pdf-api-e2e:local
+    command: ["python", "-E", "-s", "test_e2e.py"]
+    depends_on:
+      app:
+        condition: service_healthy
+      webhook-receiver:
+        condition: service_healthy
+    environment:
+      APP_URL: http://app:3000
+      RECEIVER_URL: http://webhook-receiver:8080
+      E2E_OUT_DIR: /out
+      # Passed through from tests/e2e/run.sh; never written to disk or printed.
+      E2E_API_TOKEN:
+      E2E_WEBHOOK_SECRET:
+      E2E_WEBHOOK_HMAC_SECRET:
+      EXPECTED_SOURCE_URL:
+    volumes:
+      - ./.e2e/out:/out
+
+volumes:
+  pgdata:
+  docuseal-data:

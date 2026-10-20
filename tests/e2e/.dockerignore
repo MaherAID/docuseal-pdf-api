@@ -1,0 +1,3 @@
+# Only the Python sources go into the test image.
+*
+!*.py
