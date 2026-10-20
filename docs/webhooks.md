@@ -79,8 +79,9 @@ On a network error, timeout or HTTP status >= 400 the job schedules the next att
 
 Retries are skipped once the event was delivered successfully (state kept per endpoint and
 event in `webhook_events` / `webhook_attempts`, visible under *Settings → Webhooks → (endpoint)*,
-where single events can also be re-sent manually). Scheduled retries live in Redis; with the
-embedded Redis of the image they are lost when the container is replaced.
+where single events can also be re-sent manually). Scheduled retries live in Redis; the
+embedded Redis of the image snapshots to `/data/docuseal/dump.rdb`, so they survive a restart
+only on a persistent volume (not on Cloud Run's ephemeral filesystem).
 
 Recommended receiver behaviour: verify the signature, answer `2xx` quickly, process
 asynchronously, and de-duplicate on `(event_type, data.id, timestamp)`.

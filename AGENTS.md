@@ -63,7 +63,11 @@ docker compose up -d --build     # dev stack, needs .env (copy .env.example)
 - Trivy accepts two shadowed default-gem CVEs until 2026-12-31 (`.trivyignore.yaml`); re-check
   after every upstream bump.
 - Signed file URLs expire after 40 min (`FILE_URLS_EXPIRE_MINUTES`); `APP_URL` decides their host.
-- Embedded Redis/Sidekiq: jobs and webhook retries are lost when the container is replaced.
+- Embedded Redis/Sidekiq: jobs and webhook retries persist only via Redis snapshots in
+  `/data/docuseal/dump.rdb`; on an ephemeral filesystem (Cloud Run) they are lost.
+- An unexpected failure while attaching a document rolls back the database transaction, but
+  blobs already uploaded to storage stay as orphans (validation runs first, so this needs an
+  infrastructure error).
 - `rails runner` inside the app container also runs pending migrations (upstream initializer).
 
 ## Backlog

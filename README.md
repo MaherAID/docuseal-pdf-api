@@ -112,8 +112,11 @@ the overlay adds three optional ones.
 | `PDF_API_MAX_REQUEST_MB` | no | Overlay: maximum request body of `POST /api/templates/pdf` (default 64, larger → 413). |
 | `SOURCE_CODE_URL` | no | Overlay: target of the AGPL source link and `GET /source`. Default: the repository at the image's revision. |
 
-Background jobs (webhooks, signed PDF generation, emails, expiry) run in Sidekiq. With the
-default embedded Redis, jobs and scheduled retries only live as long as the container.
+Background jobs (webhooks, signed PDF generation, emails, expiry) run in Sidekiq inside the
+Puma process. Without `REDIS_URL` the image starts its own `redis-server` (127.0.0.1:16379,
+password derived from `SECRET_KEY_BASE`); Redis' default snapshots go to
+`/data/docuseal/dump.rdb`, so queued jobs and scheduled retries survive restarts only if
+`/data/docuseal` is persistent.
 
 ### Running on Google Cloud Run
 
