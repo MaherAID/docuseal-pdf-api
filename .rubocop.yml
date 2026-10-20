@@ -1,0 +1,41 @@
+# RuboCop configuration for the overlay. Mirrors the settings of DocuSeal 3.3.3
+# (.rubocop.yml upstream) so overlay code reads like the code it extends.
+plugins:
+  - rubocop-performance
+  - rubocop-rails
+
+AllCops:
+  NewCops: enable
+  TargetRubyVersion: '4.0'
+  SuggestExtensions: false
+  Include:
+    - 'overlay/**/*.rb'
+    - 'tests/**/*.rb'
+    - 'Gemfile'
+  Exclude:
+    - 'vendor/bundle/**/*'
+    - '.e2e/**/*'
+
+Style/Documentation:
+  Enabled: false
+
+Lint/MissingSuper:
+  Enabled: false
+
+Metrics/ParameterLists:
+  Max: 12
+
+Metrics/MethodLength:
+  Max: 30
+
+Metrics/CyclomaticComplexity:
+  Max: 15
+
+# The e2e bootstrap is a rails runner script, not application code.
+Rails/Output:
+  Exclude:
+    - 'tests/e2e/bootstrap.rb'
+
+Metrics/BlockLength:
+  Exclude:
+    - 'tests/e2e/bootstrap.rb'

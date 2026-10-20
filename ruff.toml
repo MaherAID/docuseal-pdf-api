@@ -1,0 +1,16 @@
+# Ruff (lint + format) for the Python end-to-end test in tests/e2e.
+target-version = "py314"
+line-length = 120
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "N", "A", "ARG", "SIM", "RUF", "PL"]
+ignore = [
+  "S101",     # assert narrows types right after explicit checks
+  "PLR2004",  # HTTP status codes read better inline
+  "PLR0913",  # small HTTP helper with keyword-only options
+  "PLR0915",  # end-to-end steps are long by nature
+]
+
+[lint.per-file-ignores]
+# urllib calls go to fixed http:// URLs inside the compose test network.
+"tests/e2e/*.py" = ["S310"]

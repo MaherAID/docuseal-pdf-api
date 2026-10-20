@@ -1,0 +1,48 @@
+version: 2
+updates:
+  # Base image docuseal/docuseal (tag + digest). Every bump runs the overlay guards in the
+  # Dockerfile and the end-to-end test before it can be merged.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build
+    labels: [dependencies, upstream]
+
+  # Python image of the end-to-end test runner.
+  - package-ecosystem: docker
+    directory: /tests/e2e
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: test
+
+  # PostgreSQL image of the local stack.
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: build
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # RuboCop toolchain (development only).
+  - package-ecosystem: bundler
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: chore
+    groups:
+      rubocop:
+        patterns: ["rubocop*"]
