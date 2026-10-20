@@ -2,9 +2,9 @@
 # POST /api/templates/pdf (see overlay/ and docs/adr/0001-overlay-on-upstream-image.md).
 #
 # The base image is pinned by tag AND digest; Dependabot proposes updates of both.
-# USER, ENTRYPOINT and CMD are inherited unchanged from upstream: the container starts as
-# root and config/dotenv.rb of DocuSeal chowns /data/docuseal and switches the effective
-# user to docuseal (2000:2000) before the app boots (see docs/adr/0001).
+# ENTRYPOINT and CMD are inherited unchanged from upstream. Unlike upstream, the container
+# runs as the unprivileged user docuseal (2000:2000) that the upstream image already
+# creates; see docs/adr/0001.
 FROM docuseal/docuseal:3.3.3@sha256:28d0ca583860e2c73e5b068756023a93a325799a22da1f788355d566865dd051
 
 # Commit of this repository; the source code link offered under AGPL-3.0 section 13 then
@@ -35,9 +35,18 @@ RUN --mount=type=bind,source=overlay,target=/overlay \
     echo "47b952e99187c8df22a24beb58b8cbe7ab2f8ecf89527a9ad7fd7962c4d87381  /app/app/views/shared/_attribution.html.erb" \
       | sha256sum -c -
 
+# Overlay files stay owned by root, i.e. read-only for the application user.
 COPY overlay/ /app/
 
+# Started as root, upstream's config/dotenv.rb would chown the data directory at boot and
+# then switch only the effective uid to 2000. Owning it here lets the app start directly as
+# 2000; new named volumes inherit this ownership. /app/tmp, /app/log and /home/docuseal
+# already belong to docuseal in the upstream image.
+RUN chown 2000:2000 /data/docuseal && chmod 0750 /data/docuseal
+
 ENV DOCUSEAL_PDF_API_REVISION=${SOURCE_REVISION}
+
+USER 2000:2000
 
 # Upstream defines no health check. /up is the Rails health endpoint of DocuSeal; with
 # FORCE_SSL set, config.assume_ssl keeps it from redirecting plain HTTP probes.

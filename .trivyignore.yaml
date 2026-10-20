@@ -1,15 +1,6 @@
 # Accepted Trivy findings. Every entry needs a reason; vulnerability entries expire so they
 # are re-assessed (normally a newer upstream image makes them disappear first).
 
-misconfigurations:
-  - id: DS-0002
-    paths:
-      - "Dockerfile"
-    statement: >-
-      USER/ENTRYPOINT/CMD are inherited unchanged from the upstream DocuSeal image, which starts
-      as root, chowns /data/docuseal and switches the effective user to 2000:2000 in
-      config/dotenv.rb. See docs/adr/0001-overlay-on-upstream-image.md and docs/BACKLOG.md.
-
 vulnerabilities:
   # Default/bundled gems of the ruby:4.0.5-alpine base inside docuseal/docuseal:3.3.3. The app
   # does not load them: Bundler activates json 2.21.2 and net-imap 0.6.6 from /usr/local/bundle
