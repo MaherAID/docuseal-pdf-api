@@ -2,8 +2,9 @@
 
 docuseal-pdf-api is the official DocuSeal 3.3.3 container plus an overlay of added Ruby files.
 At runtime it is a single Rails/Puma process (single mode, `WEB_CONCURRENCY=0`) that also runs
-Sidekiq (embedded) and, unless `REDIS_URL` is set, a local `redis-server` on 127.0.0.1:16379.
-PostgreSQL holds all records; documents go to the local volume or object storage (GCS/S3).
+Sidekiq (embedded) and, unless `REDIS_URL` is set, a local `redis-server` on 127.0.0.1:16379 –
+all as the unprivileged user 2000:2000. PostgreSQL holds all records; documents go to
+`/data/docuseal/attachments` (a volume, or a Cloud Storage FUSE mount on Cloud Run) or to S3.
 
 ## Components
 
@@ -28,7 +29,7 @@ flowchart LR
     end
 
     pg[("PostgreSQL")]
-    storage[("Volume /data/docuseal<br/>or GCS / S3")]
+    storage[("/data/docuseal/attachments<br/>volume or Cloud Storage FUSE")]
 
     client -- "X-Auth-Token" --> puma
     signer -- "/s/:slug" --> puma

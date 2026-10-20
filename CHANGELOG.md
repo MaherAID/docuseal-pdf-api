@@ -26,5 +26,15 @@ Based on DocuSeal 3.3.3 (`docuseal/docuseal:3.3.3@sha256:28d0ca58…`).
   end-to-end test and GHCR push on `main`; Dependabot and pre-commit configuration.
 - Documentation: README (API and webhook reference), architecture, ADRs 0001–0003, webhook
   payload reference, AGENTS.md, backlog.
+- Cloud Run storage recipe: default disk storage with a Cloud Storage FUSE volume at
+  `/data/docuseal/attachments` (no service account key); the end-to-end test runs with that
+  layout (separate mount owned by 2000:2000).
+
+### Security
+
+- The container runs as the unprivileged user `docuseal` (`USER 2000:2000`) instead of
+  starting as root like upstream; `/data/docuseal` is owned by 2000 at build time and nothing
+  changes ownership at boot. The end-to-end test asserts that Puma and `redis-server` run
+  with uid 2000; the Trivy DS-0002 exception is gone.
 
 [0.1.0]: https://github.com/MaherAID/docuseal-pdf-api/releases/tag/v0.1.0

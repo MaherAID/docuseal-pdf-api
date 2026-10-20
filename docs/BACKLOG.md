@@ -8,7 +8,7 @@ Goal: create a signable template from our own PDF with field coordinates in Docu
 edition, compatible with the DocuSeal Pro request/response.
 
 - [x] Image `FROM docuseal/docuseal:3.3.3@sha256:28d0ca58…`, overlay adds files only, upstream
-      USER/ENTRYPOINT/CMD unchanged, HEALTHCHECK on `/up`.
+      ENTRYPOINT/CMD unchanged, HEALTHCHECK on `/up` (USER changed to 2000:2000 in DPA-007).
 - [x] Authentication with `X-Auth-Token` via `Api::ApiBaseController`; `authorize!(:create, Template)`.
 - [x] Body `{name, external_id?, folder_name?, shared_link?, documents[{name, file, fields[{name,
       type, role, required?, areas[{x,y,w,h,page}]}]}], flatten?, remove_tags?}`; pages 1-based in,
@@ -35,6 +35,8 @@ edition, compatible with the DocuSeal Pro request/response.
 - [x] Webhooks of `form.viewed`, `form.completed`, `form.declined`, `submission.completed`,
       `submission.expired` received and HMAC-verified; signed documents are PDFs with a
       digital signature.
+- [x] Runs with `/data/docuseal/attachments` on a separate mount owned by 2000:2000
+      (`tests/e2e/compose.attachments-mount.yml`) and checks that documents are stored there.
 
 ## DPA-004 CI/CD — done (first GitHub run pending DPA-005)
 
@@ -55,22 +57,32 @@ edition, compatible with the DocuSeal Pro request/response.
 
 ## DPA-006 Validate the Cloud Run deployment — todo
 
-- [ ] Service with `APP_URL`, `FORCE_SSL=true`, `DATABASE_URL`/`SECRET_KEY_BASE` from Secret
-      Manager, GCS storage (`GCS_BUCKET`, `GCS_PROJECT`, `GCS_CREDENTIALS`), startup probe `/up`.
+- [ ] Service (gen2 execution environment) with `APP_URL`, `FORCE_SSL=true`,
+      `DATABASE_URL`/`SECRET_KEY_BASE` from Secret Manager and startup probe `/up`; image
+      served from Artifact Registry.
+- [ ] Storage: default disk storage with a Cloud Storage FUSE volume at
+      `/data/docuseal/attachments` (mount options `uid=2000;gid=2000`), service account with
+      `roles/storage.objectUser`, no `GCS_*` variables and no service account key (README recipe).
 - [ ] Decision on background jobs: embedded Redis with CPU always allocated and exactly one
       instance, or Memorystore via `REDIS_URL`; documented in an ADR.
 - [ ] e2e flow (template → submission → completion → webhook → documents) succeeds against the
-      deployed service with a test account (no production data).
-- [ ] Verify whether GCS works with the service account (ADC) when `GCS_CREDENTIALS` is unset.
+      deployed service with a test account (no production data); uploaded and signed documents
+      appear as objects in the bucket and survive a new revision.
 
-## DPA-007 Run the container as non-root — todo (needs owner decision)
+## DPA-007 Run the container as non-root — done
 
-Upstream starts as root and only switches the effective uid to 2000. The owner's guideline
-asks for a non-root user; the task asked to keep upstream USER.
+Upstream starts as root and only switches the effective uid to 2000 (real and saved uid stay 0).
+The owner's guideline asks for a non-root container.
 
-- [ ] Image runs with `USER 2000:2000` and a 2000-owned `/data/docuseal`.
-- [ ] e2e passes; upgrade notes for existing volumes/bind mounts (chown) in the README.
-- [ ] Trivy DS-0002 exception removed.
+- [x] Image runs with `USER 2000:2000`; `/data/docuseal` is owned by 2000:2000 (0750) at build
+      time; ENTRYPOINT/CMD unchanged.
+- [x] e2e passes and asserts that Puma (PID 1) and `redis-server` run with real, effective,
+      saved and filesystem uid 2000.
+- [x] Compatibility checked: volumes created by the upstream image work; `--user 0:0` restores
+      upstream behaviour; an upstream-generated root-only `docuseal.env` needs
+      `SECRET_KEY_BASE`/`DATABASE_URL` as environment variables or a one-time chown (README
+      "Running as non-root", ADR 0001).
+- [x] Trivy DS-0002 exception removed; misconfiguration scan has no findings.
 
 ## DPA-008 Keep the upstream corresponding source available — todo
 

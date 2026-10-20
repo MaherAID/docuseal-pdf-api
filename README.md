@@ -45,8 +45,10 @@ no upstream file is edited or replaced (the Dockerfile fails the build if one wo
 | `app/controllers/docuseal_pdf_api/source_controller.rb` | `GET /source` redirects to the source of the running version |
 | `config/locales/docuseal_pdf_api.yml` | label of the source link (14 languages) |
 
-USER, ENTRYPOINT and CMD are inherited from upstream; the image only adds a `HEALTHCHECK` on
-`/up`. Details and alternatives: [ADR 0001](docs/adr/0001-overlay-on-upstream-image.md).
+ENTRYPOINT and CMD are inherited from upstream. Unlike upstream, which starts as root, the image
+runs as the unprivileged `docuseal` user (2000:2000, see [Running as non-root](#running-as-non-root))
+and adds a `HEALTHCHECK` on `/up`. Details and alternatives:
+[ADR 0001](docs/adr/0001-overlay-on-upstream-image.md).
 
 ## License and attribution
 
@@ -103,7 +105,7 @@ the overlay adds three optional ones.
 | `HOST` | no | Only used in DocuSeal's multitenant mode (and by upstream's Caddy example); single-tenant instances use `APP_URL`. |
 | `FORCE_SSL` | behind TLS | Any non-empty value except `false` enables `assume_ssl` + `force_ssl` (HSTS, secure cookies). |
 | `SMTP_ADDRESS`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_DOMAIN`, `SMTP_FROM`, `SMTP_AUTHENTICATION`, `SMTP_ENABLE_STARTTLS`, `SMTP_ENABLE_SSL`, `SMTP_ENABLE_TLS`, `SMTP_SSL_VERIFY` | no | Outgoing email. Setting `SMTP_ADDRESS` (even empty) switches to SMTP. Alternatively configure email in the UI (*Settings → Email*). |
-| `GCS_BUCKET`, `GCS_PROJECT`, `GCS_CREDENTIALS` | no | Google Cloud Storage for documents (`GCS_CREDENTIALS` = service account JSON). |
+| `GCS_BUCKET`, `GCS_PROJECT`, `GCS_CREDENTIALS` | no | Active Storage's GCS service. Needs a service account JSON key in `GCS_CREDENTIALS` (upstream passes `{}` otherwise, no ADC). On Cloud Run use the [FUSE mount](#running-on-google-cloud-run) instead and leave these unset. |
 | `S3_ATTACHMENTS_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `S3_ENDPOINT` | no | S3 (or compatible) storage. Without GCS/S3/Azure, files go to `/data/docuseal/attachments`. |
 | `REDIS_URL` | no | External Redis for Sidekiq. Unset: the image starts `redis-server` on 127.0.0.1:16379 and runs Sidekiq inside the Puma process. |
 | `FILE_URLS_EXPIRE_MINUTES` | no | Lifetime of signed file URLs in API responses and webhooks (default 40). |
@@ -118,17 +120,62 @@ password derived from `SECRET_KEY_BASE`); Redis' default snapshots go to
 `/data/docuseal/dump.rdb`, so queued jobs and scheduled retries survive restarts only if
 `/data/docuseal` is persistent.
 
+### Running as non-root
+
+The image runs as `docuseal` (uid/gid 2000, created by the upstream image). Upstream starts as
+root, chowns `/data/docuseal` in `config/dotenv.rb` and then only switches the *effective* uid
+to 2000 (real and saved uid stay 0). Here `/data/docuseal` already belongs to 2000 in the image
+(mode 0750), the root-only branches of `config/dotenv.rb` are skipped, and nothing at boot
+changes ownership or modes. Puma and the embedded `redis-server` run with uid 2000 throughout
+(checked by the end-to-end test).
+
+- New named volumes inherit the 2000 ownership. Volumes created by the upstream image keep
+  working: upstream already chowned them to 2000.
+- Bind mounts and other pre-existing mounts must be writable by 2000:2000 – `chown -R 2000:2000`
+  on the host, or mount options `uid=2000,gid=2000` (Cloud Storage FUSE, tmpfs).
+- Set `SECRET_KEY_BASE` (and `DATABASE_URL`) as environment variables. If an existing instance
+  relied on the `docuseal.env` file that upstream writes when they are missing, the non-root
+  image cannot read it (upstream creates it as root with mode 0600) and stops at boot with
+  `Permission denied … docuseal.env`: copy the values into environment variables, or run
+  `chown 2000:2000 /data/docuseal/docuseal.env` once as root.
+- `docker run --user 0:0` (compose: `user: "0:0"`) restores upstream's root start if needed.
+
 ### Running on Google Cloud Run
 
 Not yet validated in this project (see [backlog](docs/BACKLOG.md)); what the image needs:
 
+- **Image:** Cloud Run pulls from Artifact Registry (or Docker Hub); mirror
+  `ghcr.io/maheraid/docuseal-pdf-api` through an Artifact Registry remote repository or push it
+  there.
 - **Database:** Cloud SQL for PostgreSQL or Supabase via `DATABASE_URL` (Secret Manager).
   Note: if the host name contains `_`, upstream splits the URL into `DATABASE_HOST` etc.
 - **Secrets:** `SECRET_KEY_BASE` (and optionally `ENCRYPTION_SECRET`) from Secret Manager;
   never let Cloud Run instances generate their own.
 - **URL/TLS:** `APP_URL=https://<domain>`, `FORCE_SSL=true`.
-- **Storage:** the container filesystem is ephemeral – configure `GCS_BUCKET`/`GCS_PROJECT`/
-  `GCS_CREDENTIALS` (or S3).
+- **Storage:** the container filesystem is ephemeral, and Active Storage's GCS service would
+  need a service account JSON key. Keep the default disk storage instead (do **not** set
+  `GCS_BUCKET`, `GCS_PROJECT` or `GCS_CREDENTIALS`) and mount a Cloud Storage bucket at
+  `/data/docuseal/attachments` with Cloud Storage FUSE, owned by the app user. The service
+  account of the Cloud Run service needs `roles/storage.objectUser` on the bucket; no key is
+  involved.
+
+  ```bash
+  gcloud run deploy docuseal \
+    --image <region>-docker.pkg.dev/<project>/<repository>/docuseal-pdf-api:<tag> \
+    --execution-environment gen2 \
+    --add-volume name=attachments,type=cloud-storage,bucket=<bucket>,mount-options="uid=2000;gid=2000;file-mode=640;dir-mode=750" \
+    --add-volume-mount volume=attachments,mount-path=/data/docuseal/attachments \
+    --set-env-vars APP_URL=https://<domain>,FORCE_SSL=true \
+    --set-secrets SECRET_KEY_BASE=<secret>:latest,DATABASE_URL=<secret>:latest
+  ```
+
+  This works because nothing at boot tries to chown or chmod there (the image runs as 2000 and
+  the root-only code of `config/dotenv.rb` never runs), and Active Storage's disk service only
+  creates directories and writes, reads and deletes files (no chmod, chown or rename). Mount
+  only `attachments`, not all of `/data/docuseal`, so the embedded Redis snapshot stays on the
+  local filesystem. The end-to-end test runs with exactly this layout (a separate
+  `/data/docuseal/attachments` mount owned by 2000:2000, simulated with tmpfs). Add the
+  `implicit-dirs` mount option if objects are ever copied into the bucket by other tools.
 - **Background jobs:** Sidekiq runs inside the web process. With the embedded Redis set
   `--no-cpu-throttling` (CPU always allocated), `--min-instances=1` and `--max-instances=1`;
   queued and scheduled jobs are lost on instance replacement. For more instances or durable
@@ -390,7 +437,8 @@ printf '%s.%s' "$TS" "$RAW_BODY" | openssl dgst -sha256 -hmac "$WHSEC" -hex
 overlay/                 files added to /app in the image (the actual modification)
 Dockerfile               FROM docuseal/docuseal:<tag>@<digest> + guards + COPY overlay
 docker-compose.yml       local stack (app + postgres:16-alpine); profile "test" for the e2e test
-tests/e2e/               end-to-end test: run.sh, bootstrap.rb (rails runner), test_e2e.py, receiver.py
+tests/e2e/               end-to-end test: run.sh, bootstrap.rb (rails runner), test_e2e.py, receiver.py,
+                         compose.attachments-mount.yml
 scripts/lint.sh          all lint/scan steps of CI in pinned containers
 docs/                    architecture, ADRs, webhook reference, backlog
 ```
@@ -403,9 +451,12 @@ E2E_KEEP=1 tests/e2e/run.sh   # keep the stack afterwards (app on 127.0.0.1:3090
 pre-commit install         # run the lint hooks on every commit
 ```
 
-The end-to-end test creates an account, admin user (random password, never printed), API
-token and webhook endpoint through `rails runner`, then checks authentication and validation
-errors, template creation (fields, areas, page conversion, stored PDF, previews),
+The end-to-end test runs the app with `/data/docuseal/attachments` on a separate mount owned by
+2000:2000 (`tests/e2e/compose.attachments-mount.yml`, the Cloud Run FUSE layout) and verifies
+that Puma and `redis-server` run as uid 2000 and that the documents end up on that mount. It
+creates an account, admin user (random password, never printed), API token and webhook endpoint
+through `rails runner`, then checks authentication and validation errors, template creation
+(fields, areas, page conversion, stored PDF, previews),
 `GET /api/templates/:id`, submissions with two signers, the signing page (including the
 attribution and source link), completion through `PUT /api/submitters/:id`, HMAC-signed
 `form.viewed`, `form.completed`, `form.declined`, `submission.completed` and
@@ -422,8 +473,10 @@ Dependabot proposes new `docuseal/docuseal` tags with their digest. CI then veri
 overlay still only adds files, that `config/routes.rb` still runs the `:routes` load hook and
 that the wrapped attribution partial is unchanged (sha256 in the Dockerfile), and runs the
 end-to-end test. If the partial changed upstream, review the change, adapt
-`vendor/docuseal_pdf_api/views/shared/_attribution.html.erb` and update the checksum. Also
-update the version in this README, `NOTICE` and the `CHANGELOG`.
+`vendor/docuseal_pdf_api/views/shared/_attribution.html.erb` and update the checksum. If a
+new upstream version writes to another root-owned path at boot, the end-to-end test fails
+under uid 2000 – give that path to 2000 in the Dockerfile (never chown at boot). Also update
+the version in this README, `NOTICE` and the `CHANGELOG`.
 
 More for contributors and coding agents: [AGENTS.md](AGENTS.md),
 [architecture](docs/architecture.md), [ADRs](docs/adr), [backlog](docs/BACKLOG.md).
