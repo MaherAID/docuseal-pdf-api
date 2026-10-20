@@ -1,0 +1,7 @@
+# End-to-end test only: the attachments directory is a separate mount owned by 2000:2000,
+# like the Cloud Storage FUSE volume used on Cloud Run (mount options uid=2000, gid=2000).
+# The app has to store and serve documents there without changing ownership or modes.
+services:
+  app:
+    tmpfs:
+      - /data/docuseal/attachments:uid=2000,gid=2000,mode=0750

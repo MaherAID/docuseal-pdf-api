@@ -4,8 +4,10 @@
 #   tests/e2e/run.sh
 #
 # Builds the image, starts app + PostgreSQL + webhook receiver as the compose project
-# "docuseal-pdf-api-e2e", bootstraps an account/admin/API token through `rails runner`,
-# runs tests/e2e/test_e2e.py in a container and tears everything down again.
+# "docuseal-pdf-api-e2e", checks that the app runs as uid 2000, bootstraps an
+# account/admin/API token through `rails runner`, runs tests/e2e/test_e2e.py in a container
+# and tears everything down again. The attachments directory is a separate mount owned by
+# 2000:2000 (tests/e2e/compose.attachments-mount.yml), as on Cloud Run with Cloud Storage FUSE.
 #
 # Environment:
 #   E2E_SKIP_APP_BUILD=1  use an existing image (IMAGE, default docuseal-pdf-api:local)
@@ -33,8 +35,10 @@ random_hex() {
   od -An -N"$1" -tx1 /dev/urandom | tr -d ' \n'
 }
 
+COMPOSE_FILES=(-f docker-compose.yml -f tests/e2e/compose.attachments-mount.yml)
+
 compose() {
-  docker compose -p "$PROJECT" --env-file "$ENV_FILE" --profile test "$@"
+  docker compose -p "$PROJECT" "${COMPOSE_FILES[@]}" --env-file "$ENV_FILE" --profile test "$@"
 }
 
 log() {
@@ -48,7 +52,7 @@ cleanup() {
     compose logs --no-color --tail=150 app || true
   fi
   if [ "${E2E_KEEP:-0}" = "1" ]; then
-    log "E2E_KEEP=1: stack left running (docker compose -p $PROJECT --env-file $ENV_FILE --profile test down -v)"
+    log "E2E_KEEP=1: stack left running (docker compose -p $PROJECT ${COMPOSE_FILES[*]} --env-file $ENV_FILE --profile test down -v)"
   else
     compose down -v --remove-orphans >/dev/null 2>&1 || true
   fi
@@ -99,6 +103,26 @@ export EXPECTED_SOURCE_URL
 log "starting app, database and webhook receiver"
 compose up -d --wait --wait-timeout 420 db app webhook-receiver
 
+log "checking that Puma (PID 1) and the embedded redis-server run as 2000 (real, effective, saved, fs uid)"
+# shellcheck disable=SC2016 # expanded inside the container
+process_uids="$(compose exec -T app sh -c \
+  'for pid in 1 $(pidof redis-server); do echo "$pid $(grep "^Uid:" "/proc/$pid/status" | cut -f2-)"; done')"
+printf '%s\n' "$process_uids"
+if ! printf '%s\n' "$process_uids" |
+  awk 'NF == 5 { n++; for (i = 2; i <= 5; i++) if ($i != 2000) bad = 1 } END { exit (bad || n < 2) }'; then
+  echo "[e2e] the app must run as uid 2000 (Puma and redis-server)" >&2
+  exit 1
+fi
+
+log "checking that /data/docuseal/attachments is a separate mount owned by 2000:2000"
+mount_entry="$(compose exec -T app sh -c 'grep " /data/docuseal/attachments " /proc/mounts | cut -d" " -f1-3')"
+mount_owner="$(compose exec -T app stat -c '%u:%g' /data/docuseal/attachments)"
+printf '%s (owner %s)\n' "${mount_entry:-no mount}" "$mount_owner"
+if [ -z "$mount_entry" ] || [ "$mount_owner" != "2000:2000" ]; then
+  echo "[e2e] expected a separate attachments mount owned by 2000:2000" >&2
+  exit 1
+fi
+
 log "bootstrapping account, admin user, webhook and API token"
 bootstrap_output="$(compose exec -T -e E2E_WEBHOOK_URL="$WEBHOOK_URL" -e E2E_WEBHOOK_SECRET -e E2E_WEBHOOK_HMAC_SECRET \
   app /app/bin/rails runner - <tests/e2e/bootstrap.rb)"
@@ -117,3 +141,10 @@ fi
 
 log "running tests/e2e/test_e2e.py"
 compose run --rm e2e
+
+stored_files="$(compose exec -T app sh -c 'find /data/docuseal/attachments -type f | wc -l')"
+log "files stored on the attachments mount: $stored_files"
+if [ "$stored_files" -lt 1 ]; then
+  echo "[e2e] documents were not stored on the attachments mount" >&2
+  exit 1
+fi
