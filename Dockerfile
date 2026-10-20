@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 # docuseal-pdf-api: the official DocuSeal image plus a small overlay that adds
 # POST /api/templates/pdf (see overlay/ and docs/adr/0001-overlay-on-upstream-image.md).
 #
