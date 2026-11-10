@@ -6,7 +6,7 @@
 # ENTRYPOINT and CMD are inherited unchanged from upstream. Unlike upstream, the container
 # runs as the unprivileged user docuseal (2000:2000) that the upstream image already
 # creates; see docs/adr/0001.
-FROM docuseal/docuseal:3.3.3@sha256:28d0ca583860e2c73e5b068756023a93a325799a22da1f788355d566865dd051
+FROM docuseal/docuseal:3.3.5@sha256:d3fb5bd51509aac293e858c37e113882a70d5b97975fa44bfbf232bbfb17175d
 
 # Commit of this repository; the source code link offered under AGPL-3.0 section 13 then
 # points to exactly this revision. CI passes it, local builds may leave it empty.
